@@ -1,46 +1,108 @@
 <script>
 	// import { data } from './dataStore';
 	import { beforeUpdate, afterUpdate } from 'svelte';
+	import Cursor from './cursor';
 	export let name;
 
-	function setCursor(node, position) {
-		const range = document.createRange();
-		range.setStart(node, position);
-		range.collapse(true);
-		return range;
+	window.debug = () => {
+		return data;
+	};
+	/** @type {Cursor?} _cursor */
+	let _cursor;
+	/**
+	 * Obtain current cursor
+	 * @return {Cursor?} - cursor object that follows on where the cursor is currently sit on
+	 */
+	function getCursor() {
+		// Obtain range
+		const selection = window.getSelection();
+		if (!selection || selection.type !== "Caret" || !selection.isCollapsed || !selection.rangeCount) return;
+		// Determine if the range lies on text node
+		const range = selection.getRangeAt(0);
+		if (!range.startContainer || range.startContainer.nodeType !== 3) return;
+		const {startContainer} = range;	// Text node
+		// Get the real end offset from range (Since collapsed range: endOffset = startOffset)
+		const endOffset = startContainer.length - range.startOffset;
+		return new Cursor(startContainer, endOffset);
 	}
+	/**
+	 * Obtain cursor at last position
+	 * @return {Cursor?}
+	 */
+	function getEndCursor() {
+		// find selecting div
+		const selection = window.getSelection();
+		if (!selection || selection.type !== "Caret" || !selection.isCollapsed) return;
+		const {focusNode} = selection;	// Usually is a Text Node, not Element Node
+		const focusingElement = focusNode.nodeType !== 1 ? focusNode.parentNode : focusNode;
+		const div = focusingElement.closest("div[contenteditable=true]");
+		/**
+		 * Find best possible last node which is a text node
+		 * @returns {Node} could be TextNode or other Nodes
+		 */
+		const findLastNode = (node) => {
+			// Children could be text, could be div
+			const lastChild = node.lastChild;
+			if (!lastChild) return;
+			if (lastChild.nodeType !== 3) return findLastNode(lastChild) || node;
+			return lastChild;
+		};
+		const lastNode = findLastNode(div);
+		if (!lastNode) return;
+		return new Cursor(lastNode, 0);
+	}
+	// beforeUpdate(() => {
+	// 	_cursor = getCursor();
+	// });
 	afterUpdate(() => {
-		const div = document.querySelector("#text");
-		// Children could be text, could be div
-		const lastChild = div.childNodes[div.childNodes.length-1];
-		console.log(div.childNodes, lastChild);
-		if (!lastChild) return;
+		_cursor = getEndCursor();
+		if (!_cursor) return;
 		const selection = window.getSelection();
 		selection.removeAllRanges();
 		// if it is a div, return 1 for startOffset
-		selection.addRange(setCursor(lastChild, lastChild.innerText ? 1 : lastChild.length));
+		selection.addRange(_cursor.getRange());
 	});
+
+	// let data = '';
 	let data = {
 		// Uint8Array?
-		_data: [],
+		_data: new Uint8Array(),
+		_isNewCharCode: false,
 		get hex() {
-			// format for long 
-			return this._data.join(" ");
+			// format for long lines?
+			// Unsigned byte, so no need (byte & 0xFF) to rectify signed values
+			return Array.from(this._data).map(byte => byte.toString(16).padStart(2, '0')).join(" ");
 		},
-		set hex(newHex) {
-			const SPAN = 2;
-			// const sanitizedHex = newHex.replace(/[^0-9a-fA-F\n]/g, "").replace(new RegExp(`^0{${SPAN-1}}`), "");
-			const sanitizedHex = newHex.replace(new RegExp(`^0{${SPAN-1}}`), "");
-			console.log("[sanitizedHex]", sanitizedHex);
-			this._data = [...divideText(sanitizedHex, SPAN)];
+		set hex(html) {
+			const sanitizedHex = _unescape(html)
+				// Removing spaces and non-Hex values
+				.replace(/[^0-9a-fA-F\n]/g, "")
+				// Removing leading zero
+				.replace(new RegExp(`^0(?=[0-9a-fA-Z])`), "");
+			this._data = new Uint8Array([...divideText(sanitizedHex, 2)].map(hex => parseInt(hex, 16)));
 		},
 		get charCode() {
-			
+			const charCode = Array.from(this._data).join(" ");
+			return charCode + (this._isNewCharCode ? "&nbsp;" : "");
 		},
-		set charCode(s) {
-
+		set charCode(html) {
+			const htmlText = _unescape(html);
+			// Removing spaces and non-Int values
+			const sanitizedCharCode = htmlText.replace(/[^0-9 \n]/g, "");
+			// If there is a trailing space, indicate a new charcode is inputting
+			this._isNewCharCode = /\s$/.test(htmlText);
+			// Parse and set max at 255
+			const charCodes = sanitizedCharCode.split(" ").filter(x => x).map(str => {
+				const code = parseInt(str, 10);
+				return code > 255 ? 255 : code;
+			});
+			this._data = new Uint8Array(charCodes);
 		}
 	};
+	function _unescape(txt) {
+		return txt.replace(/&nbsp;?/g, " ");
+	}
+	window._unescape = _unescape;
 	function* divideText(txt, span = 1) {
 		if (span <= 0) return txt;
 		const _txt = txt.padStart(span * Math.ceil(txt.length/span), '0');
@@ -56,9 +118,9 @@
 
 <main>
 	<h1>Binary Viewer</h1>
-	<div id="text" contenteditable="true" bind:innerHTML={data.hex}></div>
-	<!-- <div id="text" contenteditable="true" bind:innerHTML={data.data}></div> -->
-	<!-- <div contenteditable="true" bind:innerHTML={data}></div> -->
+	<div contenteditable="true" bind:innerHTML={data.hex}></div>
+	<div contenteditable="true" bind:innerHTML={data.charCode}></div>
+	<!-- <div id="text" contenteditable="true" bind:innerHTML={data}></div> -->
 </main>
 
 <style>
