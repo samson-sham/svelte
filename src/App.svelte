@@ -97,12 +97,28 @@
 				return code > 255 ? 255 : code;
 			});
 			this._data = new Uint8Array(charCodes);
+		},
+		get utf8() {
+			return String.fromCharCode.apply(null, this._data);
+		},
+		set utf8(html) {
+			console.log("[setUTF8]", html);
+			// @TODO: How much to unescape???
+			const htmlText = _unescape(html);
+			const textEncoder = new TextEncoder();
+			this._data = textEncoder.encode(htmlText);
+		},
+		get utf16() {
+			// Convert Uint8Array to Uint16Array
+			// @WIP
+			const uint16 = this._data;
+			return String.fromCharCode.apply(null, new Uint16Array(this._data));
 		}
 	};
+	// Lodash doesn't handle non-breaking space, either use he.js
 	function _unescape(txt) {
 		return txt.replace(/&nbsp;?/g, " ");
 	}
-	window._unescape = _unescape;
 	function* divideText(txt, span = 1) {
 		if (span <= 0) return txt;
 		const _txt = txt.padStart(span * Math.ceil(txt.length/span), '0');
@@ -113,13 +129,22 @@
 			index += span;
 		}
 	}
-	
+	function* divideArray(arr, span = 1) {
+		if (span <= 0) return arr;
+		
+	}
 </script>
 
 <main>
 	<h1>Binary Viewer</h1>
+	<div>Hex</div>
 	<div contenteditable="true" bind:innerHTML={data.hex}></div>
+	<div>CharCode</div>
 	<div contenteditable="true" bind:innerHTML={data.charCode}></div>
+	<div>UTF-8</div>
+	<div contenteditable="true" bind:innerHTML={data.utf8}></div>
+	<div>UTF-16</div>
+	<div contenteditable="true">{data.utf16}</div>
 	<!-- <div id="text" contenteditable="true" bind:innerHTML={data}></div> -->
 </main>
 
