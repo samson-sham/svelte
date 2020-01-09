@@ -2,7 +2,6 @@
 	// import { data } from './dataStore';
 	import { beforeUpdate, afterUpdate } from 'svelte';
 	import Cursor from './cursor';
-	export let name;
 
 	window.debug = () => {
 		return data;
@@ -109,10 +108,7 @@
 			this._data = textEncoder.encode(htmlText);
 		},
 		get utf16() {
-			// Convert Uint8Array to Uint16Array
-			// @WIP
-			const uint16 = this._data;
-			return String.fromCharCode.apply(null, new Uint16Array(this._data));
+			return String.fromCharCode.apply(null, utf8ArrayToUtf16Array(this._data));
 		}
 	};
 	// Lodash doesn't handle non-breaking space, either use he.js
@@ -129,22 +125,31 @@
 			index += span;
 		}
 	}
-	function* divideArray(arr, span = 1) {
-		if (span <= 0) return arr;
-		
+	/**
+	 * Convert Uint8Array to Uint16Array
+	 * @param {Uint8Array} arr
+	 * @returns {Uint16Array}
+	 */
+	function utf8ArrayToUtf16Array(arr) {
+		const _arr = Array.from(arr).reduce((uint16Array, uint8, i) => {
+			if (i % 2 === 0) return uint16Array.concat(uint8.toString(16).padStart(2, '0'));
+			uint16Array[uint16Array.length-1] = uint16Array[uint16Array.length-1] + uint8.toString(16).padStart(2, '0');
+			return uint16Array;
+		}, []).map(hex => parseInt(hex, 16));
+		return new Uint16Array(_arr);
 	}
 </script>
 
 <main>
 	<h1>Binary Viewer</h1>
-	<div>Hex</div>
+	<div><b>Hex</b></div>
 	<div contenteditable="true" bind:innerHTML={data.hex}></div>
-	<div>CharCode</div>
+	<div><b>CharCode</b></div>
 	<div contenteditable="true" bind:innerHTML={data.charCode}></div>
-	<div>UTF-8</div>
+	<div><b>UTF-8</b></div>
 	<div contenteditable="true" bind:innerHTML={data.utf8}></div>
-	<div>UTF-16</div>
-	<div contenteditable="true">{data.utf16}</div>
+	<div><b>UTF-16</b></div>
+	<div>{data.utf16}</div>
 	<!-- <div id="text" contenteditable="true" bind:innerHTML={data}></div> -->
 </main>
 
